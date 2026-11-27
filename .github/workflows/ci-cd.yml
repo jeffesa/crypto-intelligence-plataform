@@ -95,7 +95,7 @@ jobs:
   deploy:
     name: Deploy to prod (SAM / EC2 free-tier)
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: prod
