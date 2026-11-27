@@ -83,7 +83,7 @@ por profile (dev/test/prod).
 
 ---
 
-### TASK-004: Configurar CI/CD GitHub Actions, SonarCloud e Quality Gates
+### TASK-004: Configurar CI/CD GitHub Actions (build + deploy automático), SonarCloud e Quality Gates
 
 **Labels:** `priority: high`, `épico: setup`, `pontos: 5`, `type: infra`
 **Milestone:** Sprint 1 - Fundação
