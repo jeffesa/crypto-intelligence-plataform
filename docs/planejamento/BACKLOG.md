@@ -89,16 +89,22 @@ por profile (dev/test/prod).
 **Milestone:** Sprint 1 - Fundação
 **Status:** 🟡 TODO
 
-**Descrição:** Pipeline completo: build, testes unitários/integração, cobertura JaCoCo ≥ 80%,
-SonarCloud analysis, quality gate, validação de branch naming, auto PR develop→main.
+**Descrição:** Pipeline completo de CI/CD em dois jobs (padrão fase 4): job **build** (build, testes
+unitários/integração, cobertura JaCoCo ≥ 80%, SonarCloud analysis com quality gate bloqueante,
+validação de branch naming, auto PR develop→main) e job **deploy** (deploy automático SOMENTE após
+merge em `main` e após build+Sonar passarem, com verificação de secrets e OIDC). Deploy adaptado à
+estratégia free-tier (EC2 t3.micro + Docker Compose / SAM para RDS), não ECS Fargate.
 
 **Critérios de Aceitação:**
-- [ ] `.github/workflows/ci-cd.yml`: trigger push/PR develop/main, Maven verify, cache, Java 21, SonarCloud
+- [ ] `.github/workflows/ci-cd.yml` job `build`: trigger push/PR develop/main, Maven verify, cache, Java 21, SonarCloud
+- [ ] SonarCloud com `-Dsonar.qualitygate.wait=true` (build falha se quality gate falhar) — PR para `main` exige SONAR_TOKEN e gate bloqueante
+- [ ] `.github/workflows/ci-cd.yml` job `deploy`: `needs: build`, `if: push && ref == refs/heads/main`, environment `prod`
+- [ ] Deploy job: verificação prévia de secrets (falha cedo com mensagem clara) + autenticação AWS via OIDC (`aws-actions/configure-aws-credentials`) + deploy SAM/script para EC2 (free-tier), região `sa-east-1`
 - [ ] `.github/workflows/branch-naming.yml`: prefixos feature/, bugfix/, hotfix/, release/, chore/, docs/, test/, refactor/
 - [ ] `.github/workflows/auto-pr-to-main.yml`: PR automático develop→main
 - [ ] `sonar-project.properties` multi-module configurado
 - [ ] Quality Gate: 0 bugs, 0 vulnerabilities, coverage ≥ 80%, duplicated lines < 3%
-- [ ] Pipeline verde no primeiro push
+- [ ] Pipeline verde no primeiro push; deploy comprovado em merge para main
 
 **Dependências Técnicas:** TASK-001 concluída
 
