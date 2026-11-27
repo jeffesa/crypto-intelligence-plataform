@@ -1,0 +1,154 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Test & SonarCloud
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify project structure (pom.xml present?)
+        id: check-pom
+        run: |
+          if [ -f pom.xml ]; then
+            echo "POM_EXISTS=true" >> $GITHUB_OUTPUT
+            echo "pom.xml encontrado."
+          else
+            echo "POM_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "::notice::pom.xml não encontrado. Build/Sonar ignorados até TASK-001 ser concluída."
+          fi
+
+      - name: SonarCloud token policy
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          BASE_REF: ${{ github.base_ref }}
+          SONAR_TOKEN_VALUE: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN_VALUE" ]; then
+            echo "SONAR_TOKEN configurado."
+            exit 0
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "main" ]; then
+            echo "::error title=SONAR_TOKEN ausente::SONAR_TOKEN não está configurado. PR para main exige análise SonarCloud e quality gate."
+            exit 1
+          fi
+          echo "::notice::SONAR_TOKEN não configurado. Análise SonarCloud ignorada neste evento."
+
+      - name: Set up JDKs (21 for Sonar, 21 for build)
+        if: steps.check-pom.outputs.POM_EXISTS == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: maven
+
+      - name: Cache SonarCloud packages
+        if: steps.check-pom.outputs.POM_EXISTS == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Build and Test with Coverage
+        if: steps.check-pom.outputs.POM_EXISTS == 'true'
+        run: mvn -B clean verify
+
+      - name: Upload coverage reports
+        if: steps.check-pom.outputs.POM_EXISTS == 'true' && always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./*/target/site/jacoco/jacoco.xml
+          flags: unittests
+          name: codecov-umbrella
+          verbose: true
+
+      - name: SonarCloud Scan
+        if: steps.check-pom.outputs.POM_EXISTS == 'true' && env.SONAR_TOKEN != '' && (github.event_name != 'push' || github.ref != 'refs/heads/main')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JAVA_HOME: ${{ env.JAVA_HOME_21_X64 }}
+        run: mvn -B sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=true
+
+      - name: Build Status
+        if: success() && steps.check-pom.outputs.POM_EXISTS == 'true'
+        run: echo "✅ Build, tests, and SonarCloud analysis completed successfully"
+
+      - name: Build Status (skipped - no pom.xml)
+        if: success() && steps.check-pom.outputs.POM_EXISTS == 'false'
+        run: echo "OK Build ignorado - pom.xml ausente - aguardando TASK-001"
+
+  deploy:
+    name: Deploy to prod (SAM / EC2 free-tier)
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check required deploy secrets
+        run: |
+          if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
+            echo "::error title=Secret ausente::AWS_DEPLOY_ROLE_ARN não está configurado no environment prod."
+            exit 1
+          fi
+          if [ -z "$ADMIN_EMAIL" ]; then
+            echo "::error title=Secret ausente::ADMIN_EMAIL não está configurado no environment prod."
+            exit 1
+          fi
+          if [ -z "$SENDER_EMAIL" ]; then
+            echo "::error title=Secret ausente::SENDER_EMAIL não está configurado no environment prod."
+            exit 1
+          fi
+          if [ -z "$API_TOKEN" ]; then
+            echo "::error title=Secret ausente::API_TOKEN não está configurado no environment prod."
+            exit 1
+          fi
+          echo "Secrets de deploy configurados."
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: sa-east-1
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: SAM build
+        working-directory: infra
+        run: sam build
+
+      - name: SAM deploy (prod)
+        working-directory: infra
+        run: >-
+          sam deploy --config-env prod --no-confirm-changeset
+          --parameter-overrides "Environment=prod AdminEmail=$ADMIN_EMAIL SenderEmail=$SENDER_EMAIL ApiToken=$API_TOKEN Region=sa-east-1"
