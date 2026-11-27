@@ -83,7 +83,7 @@ por profile (dev/test/prod).
 
 ---
 
-### TASK-004: Configurar CI/CD GitHub Actions, SonarCloud e Quality Gates
+### TASK-004: Configurar CI/CD GitHub Actions (build + deploy automático), SonarCloud e Quality Gates
 
 **Labels:** `priority: high`, `épico: setup`, `pontos: 5`, `type: infra`
 **Milestone:** Sprint 1 - Fundação
@@ -101,7 +101,7 @@ estratégia free-tier (EC2 t3.micro + Docker Compose / SAM para RDS), não ECS F
 - [x] `.github/workflows/ci-cd.yml` job `build`: trigger push/PR develop/main, Maven verify, cache, Java 21, SonarCloud
 - [x] SonarCloud com `-Dsonar.qualitygate.wait=true` (build falha se quality gate falhar) — PR para `main` exige SONAR_TOKEN e gate bloquante
 - [x] `.github/workflows/ci-cd.yml` job `deploy`: `needs: build`, `if: push && ref == refs/heads/main && vars.DEPLOY_ENABLED == 'true'`, environment `prod`
-- [ ] Deploy job: verificação prévia de secrets (falha cedo com mensagem clara) + autenticação AWS via OIDC (`aws-actions/configure-aws-credentials`) + deploy SAM/script para EC2 (free-tier), região `sa-east-1`
+- [x] Deploy job: verificação prévia de secrets (falha cedo com mensagem clara) + autenticação AWS via OIDC (`aws-actions/configure-aws-credentials`) + deploy SAM/script para EC2 (free-tier), região `sa-east-1`
 - [x] `.github/workflows/branch-naming.yml`: prefixos feature/, bugfix/, hotfix/, release/, chore/, docs/, test/, refactor/
 - [x] `.github/workflows/auto-pr-to-main.yml`: PR automático develop→main
 - [x] `sonar-project.properties` multi-module configurado
