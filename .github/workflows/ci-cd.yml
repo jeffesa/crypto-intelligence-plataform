@@ -78,7 +78,7 @@ jobs:
           verbose: true
 
       - name: SonarCloud Scan
-        if: steps.check-pom.outputs.POM_EXISTS == 'true' && env.SONAR_TOKEN != '' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: steps.check-pom.outputs.POM_EXISTS == 'true' && env.SONAR_TOKEN != '' && (github.event_name != 'push' || github.ref != 'refs/heads/main')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JAVA_HOME: ${{ env.JAVA_HOME_21_X64 }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Build Status (skipped - no pom.xml)
         if: success() && steps.check-pom.outputs.POM_EXISTS == 'false'
-        run: echo "ℹ️ Build ignorado: pom.xml ausente (aguardando TASK-001 - Estrutura multi-module Maven)."
+        run: echo "OK Build ignorado - pom.xml ausente - aguardando TASK-001"
 
   deploy:
     name: Deploy to prod (SAM / EC2 free-tier)
